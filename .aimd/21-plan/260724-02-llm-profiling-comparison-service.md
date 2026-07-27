@@ -1,7 +1,8 @@
 # LLM 프로파일링 비교 웹 서비스 계획
 
 - 일자: 2026-07-24
-- 상태: 계획 확정
+- 갱신: 2026-07-26 — 제품 가정 교정(저장소 예시 기반 일반화, BYO-key LLM)
+- 상태: 대체됨 — `260726-01-client-only-trace-comparison.md`(브라우저 단독·에이전트 SQL 폐기)로 이어진다
 - 제품 형태: ZIP 기반 프로파일링 비교 웹 서비스
 - 핵심 원칙: LLM 에이전트가 도구를 사용해 수치를 직접 측정하고 비교한다.
 
@@ -21,53 +22,66 @@
 
 ## 2. 제품 가정
 
-구현 작업에 넘길 프로파일링 소스 루트는 다음 경로로 고정한다.
+### 2.1 참조 예시와 일반화 원칙
 
-```text
-/Users/3i-a1-2022-033/Workspaces/mobile.android.app.pivoplus/.aimd/12-wiki/02-profiling
-```
-
-이 루트를 기준으로 필요한 자산을 해석한다.
+참조 예시의 단일 출처는 이 저장소다. 구현 담당자는 아래 자산에서 캡처 계약을 추측해 시작한다.
 
 | 자산 | 경로 |
 |---|---|
-| 캡처 스크립트 | `script/capture-performance.sh` |
-| 캡처 방법과 출력 규격 | `01-performance-profiling.md` |
-| P0 검증용 기존 캡처 | `captures/` |
+| 캡처 방법과 출력 규격 문서 | `profiling/01-performance-profiling.md` |
+| 캡처 스크립트 | `profiling/script/capture-performance.sh` |
+| P0 검증용 예시 캡처 ZIP | 저장소 루트 `20260723-175550.zip` · `20260723-201509.zip` |
 
-별도 서비스 저장소를 만들 때 구현 담당자에게 위 루트를 입력 자료로 넘긴다. 서비스 코드가 이 로컬 절대 경로에 런타임 의존하지는 않으며, 캡처 ZIP 계약과 필요한 스크립트는 서비스 저장소에 이관하거나 배포 가능한 형태로 제공한다.
+단, 위 예시는 계약을 추측하기 위한 출발점일 뿐이며 서비스가 이 스크립트의 출력 구조에 고정 의존해서는 안 된다. 다른 저장소, 다른 앱, 다른 캡처 방법으로 만든 Android Perfetto 캡처도 그대로 동작해야 한다.
 
-MVP는 다음 입력을 기준으로 한다.
+- 필수 입력은 `유효한 Perfetto trace를 1개 이상 포함한 ZIP`뿐이다.
+- `config.textproto`, `metadata.txt` 같은 부속 파일은 있으면 활용하고, 없으면 package·기기·기록 시간 등을 trace 자체에서 조회한다.
+- ZIP 내부 폴더 구조를 가정하지 않는다. 재귀 탐색으로 trace 후보를 찾고 `__MACOSX/`, `.DS_Store` 같은 OS 부산물은 무시한다.
+- 예시 스크립트가 켜는 data source(FrameTimeline, `linux.perf` 등)가 빠진 trace도 거부하지 않는다. 해당 지표는 `측정 불가`로 분리해 보고한다.
+
+예시 ZIP의 실제 구조는 다음과 같다(타임스탬프 폴더로 감싸져 있고 macOS 부산물이 섞여 있다).
+
+```text
+20260723-175550.zip
+├─ 20260723-175550/
+│  ├─ config.textproto
+│  ├─ metadata.txt
+│  └─ trace-20260723-175550.perfetto-trace
+└─ __MACOSX/…            # 무시
+```
+
+ZIP 내부에 trace가 여러 개면 MVP에서는 사용자에게 분석 대상을 선택하게 한다. 자동 다중 구간 비교는 후속 범위로 둔다.
+
+### 2.2 MVP 입력
 
 | 입력 | 내용 |
 |---|---|
 | 기준선 ZIP | 변경 전 특정 시간대의 프로파일링 캡처 |
 | 비교 ZIP | 변경 후 같은 시나리오의 프로파일링 캡처 |
 | 사용자 프롬프트 | 변경 내용, 측정 목적, 특히 확인할 경로와 해석 시 주의사항 |
+| LLM API 키 | 사용자가 브라우저에서 직접 등록하는 OpenAI 또는 OpenRouter 키 |
 
-현재 캡처 ZIP의 기본 구조는 다음과 같다.
+### 2.3 LLM provider와 모델
 
-```text
-capture.zip
-├─ config.textproto
-├─ metadata.txt
-└─ trace-YYYYMMDD-HHMMSS.perfetto-trace
-```
-
-ZIP 내부에 여러 trace가 있으면 MVP에서는 사용자에게 분석 대상을 선택하게 한다. 자동 다중 구간 비교는 후속 범위로 둔다.
+- 서비스는 자체 LLM 키를 보유하지 않는다. 사용자가 웹페이지를 열 때마다 API 키를 직접 등록하는 BYO-key 방식이다.
+- provider는 OpenAI 직접 호출을 기본으로 하고, 같은 흐름에서 OpenRouter 키를 선택해 쓸 수 있다(OpenAI 호환 API로 호출).
+- 기본 모델은 `GPT5.6-Terra`이고 reasoning effort는 `high`로 실행한다.
+- 사용자는 모델을 `Sol` 또는 `Luna`로 전환할 수 있다. 모델 목록은 이 3종 고정으로 시작하되 provider adapter에서 쉽게 추가할 수 있는 구조로 둔다.
+- 등록된 키와 모델 선택은 브라우저 페이지 세션 메모리에만 두고 어디에도 영구 저장하지 않는다. 페이지를 다시 열면 다시 등록한다.
 
 ## 3. 사용자 흐름
 
-1. 새 비교 분석을 만든다.
-2. 기준선과 비교 대상의 이름을 입력한다. 예: `NV21 초기 구현`, `PixelEngine 적용`.
-3. 두 ZIP 파일을 업로드한다.
-4. 참고 프롬프트를 입력한다.
-5. 서버가 ZIP과 trace의 안전성 및 읽기 가능 여부만 사전 검증한다.
-6. LLM 에이전트가 두 trace를 열고 필요한 측정을 계획한다.
-7. 화면에서 현재 단계와 실행 중인 측정 항목을 확인한다.
-8. 분석 완료 후 프롬프트 기준으로 선정된 핵심 지표 3~5개와 상세 비교를 확인한다.
-9. 각 수치에서 근거 SQL, 계산식, 원시 결과를 펼쳐 볼 수 있다.
-10. 다른 프롬프트로 다시 분석하거나 읽기 전용 링크로 결과를 공유한다.
+1. 웹페이지 진입 시 provider(OpenAI 또는 OpenRouter)와 API 키를 등록하고 모델을 고른다(기본 `GPT5.6-Terra` high).
+2. 새 비교 분석을 만든다.
+3. 기준선과 비교 대상의 이름을 입력한다. 예: `NV21 초기 구현`, `PixelEngine 적용`.
+4. 두 ZIP 파일을 업로드한다.
+5. 참고 프롬프트를 입력한다.
+6. 서버가 ZIP과 trace의 안전성 및 읽기 가능 여부만 사전 검증한다.
+7. LLM 에이전트가 두 trace를 열고 필요한 측정을 계획한다.
+8. 화면에서 현재 단계와 실행 중인 측정 항목을 확인한다.
+9. 분석 완료 후 프롬프트 기준으로 선정된 핵심 지표 3~5개와 상세 비교를 확인한다.
+10. 각 수치에서 근거 SQL, 계산식, 원시 결과를 펼쳐 볼 수 있다.
+11. 다른 프롬프트로 다시 분석하거나 읽기 전용 링크로 결과를 공유한다.
 
 프롬프트 입력 예시:
 
@@ -236,6 +250,8 @@ AnalysisReport
 ### 7.1 새 분석
 
 - 서비스 첫 진입 화면 자체를 새 분석 화면으로 사용
+- 상단에 LLM 키 등록 영역: provider 선택(OpenAI·OpenRouter), API 키 입력, 모델 선택(기본 `GPT5.6-Terra` high, `Sol`·`Luna` 전환)
+- 키는 페이지 세션 메모리에만 유지됨을 안내하고, 키 미등록 상태에서는 분석 시작 버튼 비활성
 - 기준선 ZIP drop zone
 - 비교 ZIP drop zone
 - 각 캡처 이름 입력
@@ -289,7 +305,7 @@ Android 앱 저장소와 배포 수명이 다르므로 실제 서비스는 별�
 | 비동기 작업 | 초기에는 DB job polling, 필요 시 Redis queue로 확장 |
 | DB | PostgreSQL |
 | 파일 저장 | 로컬 임시 저장에서 시작, 배포 시 S3 호환 object storage |
-| LLM | tool calling과 JSON schema 응답을 지원하는 provider adapter |
+| LLM | 사용자 BYO key로 호출하는 OpenAI·OpenRouter adapter(OpenAI 호환), 기본 `GPT5.6-Terra` high, tool calling과 JSON schema 응답 사용 |
 | 배포 | Web/API/worker 분리 container |
 
 Python worker를 권장하는 이유는 Trace Processor 실행, SQL 결과 가공, 계산 sandbox와 LLM agent loop를 한 프로세스 경계에서 다루기 쉽기 때문이다.
@@ -315,13 +331,16 @@ GET    /s/{shareToken}
 
 진행 상태는 `CREATED -> UPLOADING -> VALIDATING -> ANALYZING -> VERIFYING -> COMPLETED` 순으로 두고 실패와 취소 상태를 별도로 둔다.
 
+분석 시작 요청(`/start`, `/rerun`)은 provider, 모델, API 키를 함께 전달한다. 서버는 키를 해당 작업 실행 동안만 메모리에 유지하고 저장하지 않는다.
+
 ## 10. 보안과 운영 제약
 
 - ZIP 경로 탈출, symlink, 중첩 archive를 거부한다.
 - 압축 전·후 최대 크기, 파일 수, trace 개수 제한을 둔다.
 - worker는 분석마다 격리된 임시 디렉터리와 제한된 CPU/메모리에서 실행한다.
 - SQL은 Trace Processor session에만 실행하고 외부 DB에는 실행하지 않는다.
-- LLM API key는 서버에만 보관한다.
+- 사용자 LLM API 키는 서버에 영구 저장하지 않는다. 분석 요청과 함께 받아 해당 작업 프로세스 메모리에서만 쓰고 종료 시 폐기하며, 로그·evidence·DB 어디에도 남기지 않는다.
+- 브라우저에서도 키는 페이지 세션 메모리에만 두고 localStorage·cookie에 저장하지 않는다.
 - ZIP 내부 텍스트는 신뢰하지 않는 입력으로 취급해 system prompt를 변경할 수 없게 한다.
 - 원본 ZIP과 trace는 기본 24시간 후 삭제하고 사용자가 즉시 삭제할 수 있게 한다.
 - 보고서에 기기 serial, 사용자 경로 등 민감한 메타데이터를 기본 마스킹한다.
@@ -342,20 +361,22 @@ GET    /s/{shareToken}
 
 ### P0. 분석 에이전트 기술 검증
 
-기존 캡처 두 개를 사용해 UI 없이 LLM tool-calling loop를 검증한다.
+저장소의 예시 캡처 두 개를 사용해 UI 없이 LLM tool-calling loop를 검증한다.
 
-- 프로파일링 소스 루트에서 캡처 스크립트와 ZIP 출력 계약 확인
-- 같은 루트의 `captures/`에서 기준선과 비교 대상 선정
+- `profiling/01-performance-profiling.md`와 `profiling/script/capture-performance.sh`에서 캡처 ZIP 출력 계약 확인
+- 저장소 루트의 `20260723-175550.zip`(기준선)과 `20260723-201509.zip`(비교 대상) 사용
+- `GPT5.6-Terra` high로 실행하고, 같은 adapter로 OpenRouter 경유 호출도 1회 확인
 - Trace Processor session 두 개 열기
 - LLM이 프롬프트에서 측정 계획 생성
 - LLM이 SQL 작성과 실행을 반복
 - 계산 도구로 before/after delta 계산
-- 기존 `.aimd/32-result/260723-11-nv21-before-after-comparison.md` 수준의 보고서 생성
+- 사람이 수동 분석한 수준의 비교 보고서 생성
 - 모든 숫자에 evidence 연결
 
 통과 조건:
 
-- 기존 핵심 CPU, FPS, jank, GC 결과를 재현한다.
+- 두 예시 캡처에서 핵심 CPU, FPS, jank, GC 비교 수치를 산출한다.
+- `metadata.txt`·`config.textproto`를 제거한 ZIP에서도 trace만으로 분석이 동작한다.
 - sampled CPU를 실제 wall latency로 잘못 표현하지 않는다.
 - 고정 metric extractor 없이 LLM이 필요한 쿼리를 선택한다.
 - 동일 입력을 3회 실행했을 때 핵심 판정과 주요 수치가 일관된다.
@@ -462,13 +483,16 @@ LLM 출력의 문장 전체를 snapshot으로 고정하지 않는다. 핵심 met
 | 공유 | 링크 보유자가 로그인 없이 읽는 token 기반 공유 |
 | 반응형 | 모바일을 포함한 전체 기능 지원 |
 | 불확실성 | 측정 타입과 신뢰도를 모든 수치에 항상 표시 |
+| 캡처 호환성 | 저장소 예시로 계약을 추측하되 임의 Android Perfetto 캡처 ZIP에서 동작 |
+| LLM provider | 사용자 BYO key, OpenAI 기본 + OpenRouter 선택 |
+| 모델 | 기본 `GPT5.6-Terra`(high), `Sol`·`Luna` 전환 가능 |
+| 키 보관 | 웹페이지를 열 때마다 등록, 브라우저 페이지 세션에만 유지, 서버 영구 저장 없음 |
 
 구현 착수 전에 남은 기술 결정을 확정한다.
 
-1. 첫 LLM provider와 모델
-2. 사내 전용인지 외부 사용자도 쓰는지
-3. ZIP 최대 크기와 보관 시간
-4. 별도 저장소 이름과 배포 환경
-5. 공유 링크 기본 만료 시간
+1. 사내 전용인지 외부 사용자도 쓰는지
+2. ZIP 최대 크기와 보관 시간
+3. 별도 저장소 이름과 배포 환경
+4. 공유 링크 기본 만료 시간
 
 권장 기본값은 사내 전용, 분석당 ZIP 2개, 각 1GB 이하, 원본 24시간 보관, 로그인 없는 제한된 내부 배포로 시작하는 것이다.
