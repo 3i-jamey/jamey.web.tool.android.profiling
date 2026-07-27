@@ -1,0 +1,31 @@
+{
+  "name": "perfetto-trace-compare",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3100",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 8100",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:samples": "node scripts/verify-samples.mjs"
+  },
+  "dependencies": {
+    "@zip.js/zip.js": "2.8.7",
+    "immer": "10.1.1",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.10",
+    "@types/react-dom": "19.1.7",
+    "@vitejs/plugin-react": "5.0.2",
+    "playwright-core": "^1.55.0",
+    "typescript": "5.9.2",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  }
+}
