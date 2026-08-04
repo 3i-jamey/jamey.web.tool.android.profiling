@@ -91,9 +91,10 @@ APP_PID="$("${ADB[@]}" shell pidof "$PACKAGE" 2>/dev/null | tr -d '\r')"
 [[ -n "$APP_PID" ]] || fail "$PACKAGE 프로세스가 없습니다. 먼저 RUN PROFILE apk를 실행하세요."
 
 readonly TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
-readonly OUTPUT_DIR="$OUTPUT_ROOT/$TIMESTAMP"
+readonly PACKAGE_SUFFIX="${PACKAGE##*.}"
+readonly OUTPUT_DIR="$OUTPUT_ROOT/$TIMESTAMP-$PACKAGE_SUFFIX"
 readonly CONFIG_FILE="$OUTPUT_DIR/config.textproto"
-readonly TRACE_FILE="$OUTPUT_DIR/trace-$TIMESTAMP.perfetto-trace"
+readonly TRACE_FILE="$OUTPUT_DIR/trace-$TIMESTAMP-$PACKAGE_SUFFIX.perfetto-trace"
 readonly METADATA_FILE="$OUTPUT_DIR/metadata.txt"
 readonly REMOTE_TRACE="/data/misc/perfetto-traces/pivo-performance-$TIMESTAMP.perfetto-trace"
 readonly DURATION_MILLIS=$((DURATION_SECONDS * 1000))
