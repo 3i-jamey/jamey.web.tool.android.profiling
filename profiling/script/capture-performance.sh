@@ -19,6 +19,8 @@ usage() {
         "" \
         "옵션:" \
         "  -p, --package PACKAGE     대상 프로세스 (기본값: $PACKAGE)" \
+        "  -pb1                     대상 프로세스 app.pivo.android.capture.base1" \
+        "  -pb2                     대상 프로세스 app.pivo.android.capture.base2" \
         "  -d, --duration SECONDS   기록 시간, 1-300초 (기본값: $DURATION_SECONDS)" \
         "  -f, --frequency HZ       Callstack sampling 주파수, 1-200Hz (기본값: $SAMPLE_FREQUENCY)" \
         "  -o, --output DIRECTORY   출력 루트 (기본값: $OUTPUT_ROOT)" \
@@ -36,6 +38,14 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || fail "$1 값이 없습니다"
             PACKAGE="$2"
             shift 2
+            ;;
+        -pb1)
+            PACKAGE="app.pivo.android.capture.base1"
+            shift
+            ;;
+        -pb2)
+            PACKAGE="app.pivo.android.capture.base2"
+            shift
             ;;
         -d|--duration)
             [[ $# -ge 2 ]] || fail "$1 값이 없습니다"
